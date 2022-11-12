@@ -15,13 +15,37 @@ def interp_features(data, dt, i):
 	time = data[:,0]
 	time_new = np.arange(time[0],time[-1],dt)
 
-	interp_data = np.array([interpolate.interp1d(time, data[:,i])(time_new) for i in range(1,14)]).T
+	interp_data = np.array([interpolate.interp1d(time, data[:,i])(time_new) for i in range(1,7)]).T
 	ids = np.ones((interp_data.shape[0],1))*i
-
+	breakpoint()
 	return np.hstack((ids, np.expand_dims(time_new,axis=1),interp_data))
 
 
+def extract_6dof(data):
 
+	# time x y z vx vy vz e0 e1 e2 e3 w1 w2 w3
+
+	e0 = data[:,7]  
+	e1 = data[:,8] 
+	e2 = data[:,9] 
+	e3 = data[:,10] 
+
+	
+	# spin euler angle
+	phi = np.arctan2(e3, e0) - np.arctan2(-e2, -e1)
+	# nutation euler angle
+	theta =  np.arcsin(-((e1 ** 2 + e2 ** 2) ** 0.5))
+	# precession euler angle
+	psi =  np.arctan2(e3, e0) + np.arctan2(-e2, -e1)
+	#pitch = np.arcsin(2*(e0*e2-e3*e1))
+	#roll = np.arctan2(2*(e0*e3+e1*e2), 1-2*(np.power(e2,2)+np.power(e3,2)))
+
+
+	data[:,4] = phi
+	data[:,5] = theta
+	data[:,6] = psi
+	
+	return data[:,:7]
 
 def process_data(raw_dir, n, dt):
 
@@ -52,6 +76,8 @@ def process_data(raw_dir, n, dt):
 
 		file_ind = out_inds[total_runs]
 		data = np.loadtxt(os.path.join(raw_dir, 'Outputs_run_{:07d}.txt'.format(file_ind)))
+
+		data = extract_6dof(data)
 
 		array_to_write.append(interp_features(data, dt, total_runs))
 

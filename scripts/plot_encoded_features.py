@@ -33,15 +33,24 @@ def get_test_features(norm_feat_path, orig_feat_path, train_frac):
 
 
 	feat_base = os.path.basename(norm_feat_path)
-	nruns = int(re.search('.*_([0-9]+)_[0-9]+_13.txt', feat_base).group(1))
-	nsteps = int(re.search('.*_[0-9]+_([0-9]+)_13.txt', feat_base).group(1))
+	nruns = int(re.search('.*_([0-9]+)_[0-9]+_6.txt', feat_base).group(1))
+	nsteps = int(re.search('.*_[0-9]+_([0-9]+)_6.txt', feat_base).group(1))
 
 	orig_feat = np.loadtxt(orig_feat_path)
 
 	X = np.loadtxt(norm_feat_path)
 
-	X = X.reshape((nruns, nsteps, 13))
-	orig_feat = orig_feat.reshape((nruns), nsteps, 15)
+	X = X.reshape((nruns, nsteps, 6))
+	orig_feat = orig_feat.reshape((nruns), nsteps, 8)
+
+	is_nan = np.any(np.isnan(X))
+	
+	if is_nan:
+		delete_ind = np.where(np.isnan(X))[0][0]
+		X = np.delete(X,delete_ind,axis=0)
+		orig_feat = np.delete(orig_feat, delete_ind,axis=0)
+
+	
 
 	ntrain = int(np.floor(train_frac * nruns))
 
@@ -65,20 +74,29 @@ def make_encoder(model_file):
 	return tf.keras.models.Sequential(model.layers[:encode_end_ind])
 
 
+def get_clusters(latent_features, n_neighbors, min_cluster_size):
+
+	mapper = umap.UMAP(n_neighbors=n_neighbors).fit(latent_features)
+
+	umap_data = mapper.embedding_
+
+	clusterer = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size)
+
+	return umap_data, clusterer.fit_predict(umap_data), clusterer.probabilities_
 
 if __name__ == '__main__':
 
 
 
 
-	model_dir = '/home/adambirenbaum/Documents/SEG/Trajectory_ML/outputs/models/iteration1'
+	model_dir = '/home/adambirenbaum/Documents/SEG/Trajectory_ML/outputs/models/iteration2'
 
 
-	norm_feat_path = '/home/adambirenbaum/Documents/SEG/Trajectory_ML/outputs/Features/normalized_features__172447_21_13.txt'
-	orig_feat_path = '/home/adambirenbaum/Documents/SEG/Trajectory_ML/outputs/Features/features__172447_21_13.txt'
+	norm_feat_path = '/home/adambirenbaum/Documents/SEG/Trajectory_ML/outputs/Features/Outputs4/normalized_features__491720_21_6.txt'
+	orig_feat_path = '/home/adambirenbaum/Documents/SEG/Trajectory_ML/outputs/Features/Outputs4/features__491720_21_6.txt'
 
 
-	proc_dir = '/home/adambirenbaum/Documents/SEG/Trajectory_ML/outputs/Processed'
+	proc_dir = '/home/adambirenbaum/Documents/SEG/Trajectory_ML/outputs/Processed/Output4'
 	train_frac = 0.9
 
 	min_cluster_sizes = [32, 64, 128, 256, 512]
@@ -129,27 +147,24 @@ if __name__ == '__main__':
 
 			print('Min cluster size: {}'.format(min_cluster_size))
 
-			mapper = umap.UMAP(n_neighbors=n_neighbors).fit(latent_features)
-
-			umap_data = mapper.embedding_
-
-			clusterer = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size)
-
-			cluster_labels = clusterer.fit_predict(umap_data)
+			
+			umap_data, cluster_labels, cluster_prob = get_clusters(latent_features, n_neighbors, min_cluster_size)
 
 			max_label = np.max(cluster_labels)
-			fig, ax = plt.subplots(4,2, figsize=(16,10))
-			ax = ax.flatten()
+			fig = plt.figure(figsize=(16,10))
+			# fig, ax = plt.subplots(4,2, figsize=(16,10))
+			# ax = ax.flatten()
 
 			color_palette = sns.color_palette('husl', max_label+1)
 
 			cluster_colors = [color_palette[x] if x >= 0 else (0.5, 0.5, 0.5) for x in cluster_labels]
 
 			cluster_member_colors = [sns.desaturate(x, p) for x, p in
-			                         zip(cluster_colors, clusterer.probabilities_)]
+			                         zip(cluster_colors, cluster_prob)]
 
-			ax[0].scatter(umap_data[:,0], umap_data[:,1], c=cluster_member_colors)
-			ax[0].set_title('UMAP')
+			ax = fig.add_subplot(1,2,1)
+			ax.scatter(umap_data[:,0], umap_data[:,1], c=cluster_member_colors)
+			ax.set_title('UMAP')
 
 			
 
@@ -159,7 +174,7 @@ if __name__ == '__main__':
 			good_inds = test_inds[good_runs]
 			good_colors = np.array(cluster_member_colors)[good_runs]
 
-
+			ax = fig.add_subplot(1,2,2, projection='3d')
 			for ind, _color in zip(good_inds, good_colors):
 				
 				nfile = ind // N_runs_per_file
@@ -173,21 +188,17 @@ if __name__ == '__main__':
 
 				run_data = data[data[:,0] == ind,:]
 
+				ax.plot(run_data[:,2], run_data[:,3], run_data[:,4],c=_color)
 
-				# time vs z
-				ax[1].plot(run_data[:,1], run_data[:,4],c=_color)
-				# range vs z
-				ax[2].plot(run_data[:,3], run_data[:,4],c=_color)
-				# time vs vy
-				ax[3].plot(run_data[:,1], run_data[:,6],c=_color)
-				# time vs vz
-				ax[4].plot(run_data[:,1], run_data[:,7],c=_color)
-				# time vs e0
-				ax[5].plot(run_data[:,1], run_data[:,8],c=_color)
-				# time vs e1
-				ax[6].plot(run_data[:,1], run_data[:,9],c=_color)
-				# time vs w0
-				ax[6].plot(run_data[:,1], run_data[:,12],c=_color)
+				# time vs phi
+				# ax[1].plot(run_data[:,1], run_data[:,5],c=_color)
+				# # range vs z
+				# ax[2].plot(run_data[:,1], run_data[:,6],c=_color)
+				# # time vs vy
+				# ax[3].plot(run_data[:,1], run_data[:,7],c=_color)
+				# # time vs vz
+				# ax[4].plot(run_data[:,1], run_data[:,7],c=_color)
+
 
 
 

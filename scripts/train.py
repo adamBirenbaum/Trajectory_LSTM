@@ -64,8 +64,8 @@ def test_models(model_dir):
 
 if __name__ == '__main__':
 
-	norm_feat_path = '/home/adambirenbaum/Documents/SEG/Trajectory_ML/outputs/Features/Outputs4/normalized_features__484970_21_13.txt'
-	orig_feat_path = '/home/adambirenbaum/Documents/SEG/Trajectory_ML/outputs/Features/Outputs4/features__484970_21_13.txt'
+	norm_feat_path = '/home/adambirenbaum/Documents/SEG/Trajectory_ML/outputs/Features/Outputs4/normalized_features__491720_21_6.txt'
+	orig_feat_path = '/home/adambirenbaum/Documents/SEG/Trajectory_ML/outputs/Features/Outputs4/features__491720_21_6.txt'
 	
 
 	plot_dir = '/home/adambirenbaum/Documents/SEG/Trajectory_ML/plots'
@@ -81,7 +81,7 @@ if __name__ == '__main__':
 	train_size = 0.9
 	epochs=100
 	batch_size = 256
-	nfeat=13
+	nfeat=6
 
 	
 	out_model_dir = os.path.join(out_model, os.path.basename(model_dir))
@@ -97,22 +97,47 @@ if __name__ == '__main__':
 
 	X = np.loadtxt(norm_feat_path)
 
-	feat_base = os.path.basename(norm_feat_path)
-	nruns = int(re.search('.*_([0-9]+)_[0-9]+_13.txt', feat_base).group(1))
-	nsteps = int(re.search('.*_[0-9]+_([0-9]+)_13.txt', feat_base).group(1))
-	
-	X = X.reshape((nruns, nsteps, 13))
 
-	X_train, X_test, y_train, y_test = train_test_split(X, X, train_size=train_size)
+	
+
+	feat_base = os.path.basename(norm_feat_path)
+	nruns = int(re.search('.*_([0-9]+)_[0-9]+_6.txt', feat_base).group(1))
+	nsteps = int(re.search('.*_[0-9]+_([0-9]+)_6.txt', feat_base).group(1))
+	
+	X = X.reshape((nruns, nsteps, 6))
+
+	is_nan = np.any(np.isnan(X))
+	
+	if is_nan:
+		delete_ind = np.where(np.isnan(X))[0][0]
+		X = np.delete(X,delete_ind,axis=0)
+
+	ntrain = int(np.floor(train_size * nruns))
+
+	#train_slice = slice(0, ntrain)
+
+	X_train = X[:ntrain,:,:]
+	X_test = X[ntrain:,:,:]
+
+
+	#X_train, X_test, y_train, y_test = train_test_split(X, X, train_size=train_size)
 	
 	model_files = os.listdir(model_dir)
 
 	test_models(model_dir)
 
+	already_done = ['64_32', '256_128']
+
 	for model_file in model_files:
+		print(model_file)
 
 		fullname = os.path.join(model_dir, model_file)
 		basename = os.path.splitext(model_file)[0]
+
+		# if basename in already_done:
+		# 	continue
+
+		
 		model = make_model(fullname, (nsteps, nfeat))
 
 		tb_dir = os.path.join(tensorboard_dir, basename)
@@ -143,7 +168,10 @@ if __name__ == '__main__':
 		yhat = model.predict(X_test)
 
 		orig_feat = np.loadtxt(orig_feat_path)
-		orig_feat = orig_feat.reshape((nruns, nsteps, 15))
+		orig_feat = orig_feat.reshape((nruns, nsteps, 8))
+
+		if is_nan:
+			orig_feat = np.delete(orig_feat, delete_ind, axis=0)
 
 		fig1, ax1 = plt.subplots(figsize=(10,10))
 
@@ -161,7 +189,7 @@ if __name__ == '__main__':
 		feature_plot_dir = os.path.join(plot_dir, 'features_{}'.format(basename))
 		os.makedirs(feature_plot_dir,exist_ok=True)
 
-		feature_labels=['x','y','z','vx','vy','vz','e0','e1','e2','e3','w0','w1','w2']
+		feature_labels=['x','y','z','phi','theta','psi']
 
 
 		for j in range(nfeat):
